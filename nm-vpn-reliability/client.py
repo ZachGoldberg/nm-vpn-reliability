@@ -67,9 +67,13 @@ def server_connect(server):
     print "Connecting to %s..." % server
     try:
         con.up(id=server)
+        # Ensure everything settles
+        time.sleep(3)
         print "Connected"
         return True
     except:
+        import traceback; traceback.print_exc()
+        print "Connection Failed!"
         return False
 
 
@@ -100,17 +104,21 @@ def shell(args):
     return retcode, stdout, stderr
 
 
+def ping_ok(pingserver):
+    retcode, _, _ = shell(["ping", '-c', '2', pingserver])
+    return not bool(retcode)
+
+
 def loop_while_connected(vpnserver, pingserver):
     had_internet = False
+    print "Start connection loop..."
     while True:
         if not is_nm_active(vpnserver):
             print 'VPN dropped on its own!'
             return had_internet
 
-        print "Start ping to %s" % pingserver
-        retcode, _, _ = shell(["ping", '-c', '2', pingserver])
-        print "Ping Ret: %s" % retcode
-        if retcode:
+        if not ping_ok(pingserver):
+            print "Ping failed"
             return had_internet
 
         had_internet = True
@@ -122,22 +130,64 @@ def loop_while_connected(vpnserver, pingserver):
 def vpn_connect(servers,
                 auto_reconnect=True,
                 external_server='8.8.8.8'):
+
     # Step 1: Try and connect
     # Step 2: Once connected, verify it works
     # Step 3: If asked to reconnect on failure, do so!
     for server in itertools.cycle(servers):
-        if not is_nm_active(server):
-            if not  server_connect(server):
+        connected = is_nm_active(server)
+        if not connected:
+            if not server_connect(server):
                 print "Failed server connect.  Trying another..."
                 continue
 
-        connected = is_nm_active(server)
-        if connected:
-            had_internet = loop_while_connected(server, external_server)
+        had_internet = loop_while_connected(server, external_server)
 
-        print had_internet, auto_reconnect
+        print "Internet lost.  Had internet: %s, Auto reconnect: %s" % (
+            had_internet, auto_reconnect)
         if had_internet and not auto_reconnect:
             return
+
+
+def get_current_speed():
+    try:
+        retcode, stdout, stderr = shell(
+            ["python", "speedtest_cli.py", "--simple"])
+        data = stdout.split("\n")
+        # ping = data[0].split(" ")[1]
+        dl = data[1].split(" ")[1]
+        ul = data[2].split(" ")[1]
+        return dl, ul
+    except:
+        return 0, 0
+
+
+def do_benchmark(vpnservers, pingserver):
+    server_speed = {}
+    for server in vpnservers:
+        if not server_connect(server):
+            continue
+
+        if not ping_ok(pingserver):
+            continue
+
+        print "Testing %s..." % server
+        dl_speed, ul_speed = get_current_speed()
+
+        if is_nm_active(server):
+            print "%s: %s Mb/s, %s Mb/s" % (server, dl_speed, ul_speed)
+            server_speed[server] = (dl_speed, ul_speed)
+        else:
+            print "VPN Failed during speedtest, ignoring results"
+
+    return sorted(server_speed, key=lambda x: x[1])
+
+
+def kill_vpns():
+    status = con.status()
+    for connection in status:
+        if connection['VPN'] == 'yes':
+            con.down(id=connection['NAME'])
 
 
 if __name__ == '__main__':
@@ -145,9 +195,16 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     servers = get_servers(args)
-    if args.benchmark:
-        servers = do_benchmark(servers)
 
+    print servers
+    if args.benchmark:
+        # Kill any current VPNs
+        kill_vpns()
+        print "Beginning benchmark"
+        servers = do_benchmark(servers,
+                               args.external_server)
+
+    print servers
     if args.connect:
         vpn_connect(
         servers,
