@@ -187,6 +187,7 @@ def kill_vpns():
     status = con.status()
     for connection in status:
         if connection['VPN'] == 'yes':
+            print "Disconnecting from %s" % connection['NAME']
             con.down(id=connection['NAME'])
 
 
