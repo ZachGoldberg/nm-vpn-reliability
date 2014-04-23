@@ -65,16 +65,18 @@ def get_servers(args):
 
 def server_connect(server):
     print "Connecting to %s..." % server
-    try:
-        con.up(id=server)
+    for i in range(1, 3):
+        try:
+            con.up(id=server)
         # Ensure everything settles
-        time.sleep(3)
-        print "Connected"
-        return True
-    except:
-        import traceback; traceback.print_exc()
-        print "Connection Failed!"
-        return False
+            time.sleep(3)
+            print "Connected"
+            return True
+        except:
+            import traceback; traceback.print_exc()
+            print "Connection Failed!"
+            time.sleep(5)
+    return False
 
 
 def is_nm_active(server):
@@ -162,9 +164,19 @@ def get_current_speed():
         return 0, 0
 
 
+def kill_vpns():
+    status = con.status()
+    for connection in status:
+        if connection['VPN'] == 'yes':
+            print "Disconnecting from %s" % connection['NAME']
+            con.down(id=connection['NAME'])
+
+
 def do_benchmark(vpnservers, pingserver):
     server_speed = {}
     for server in vpnservers:
+        kill_vpns()
+
         if not server_connect(server):
             continue
 
@@ -180,15 +192,8 @@ def do_benchmark(vpnservers, pingserver):
         else:
             print "VPN Failed during speedtest, ignoring results"
 
+    print server_speed
     return sorted(server_speed, key=lambda x: x[1])
-
-
-def kill_vpns():
-    status = con.status()
-    for connection in status:
-        if connection['VPN'] == 'yes':
-            print "Disconnecting from %s" % connection['NAME']
-            con.down(id=connection['NAME'])
 
 
 if __name__ == '__main__':
