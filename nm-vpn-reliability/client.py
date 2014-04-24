@@ -70,11 +70,11 @@ def server_connect(server):
             con.up(id=server)
         # Ensure everything settles
             time.sleep(3)
-            print "Connected"
+            print "Connected to %s" % server
             return True
         except:
             import traceback; traceback.print_exc()
-            print "Connection Failed!"
+            print "Connection to %s Failed!" % server
             time.sleep(5)
     return False
 
