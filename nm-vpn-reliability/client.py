@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import random
 import subprocess
 import sys
 import time
@@ -40,14 +41,19 @@ def build_parser():
     parser.add_argument(
       "-f", "--file",
       dest='vpnfile',
-      help="File containing a newline separated list of VPN IDs to use",
-      nargs="+")
+      help="File containing a newline separated list of VPN IDs to use")
 
     parser.add_argument(
         '-x', '--external-server',
         dest='external_server',
         help='External server to use to check connection status via ICMP',
         default='8.8.8.8')
+
+    parser.add_argument(
+        '-q', '--random',
+        dest='random',
+        help='Use servers in a random order.  Ignored with --benchmark.',
+        action='store_true')
 
     return parser
 
@@ -58,24 +64,26 @@ def get_servers(args):
         vpns = args.vpnservers
 
     if args.vpnfile:
-        vpns.extend(open(args.vpnfile).read().split())
+        vpns.extend(open(args.vpnfile).readlines())
+        vpns = [v.strip() for v in vpns]
 
     return vpns
 
 
 def server_connect(server):
     print "Connecting to %s..." % server
-    for i in range(1, 3):
+    for _ in range(1, 3):
         try:
             con.up(id=server)
-        # Ensure everything settles
+            # Ensure everything settles
             time.sleep(3)
             print "Connected to %s" % server
             return True
         except:
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
             print "Connection to %s Failed!" % server
-            time.sleep(5)
+            time.sleep(1)
     return False
 
 
@@ -201,6 +209,9 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
 
     servers = get_servers(args)
+
+    if args.random:
+        random.shuffle(servers)
 
     print servers
     if args.benchmark:
